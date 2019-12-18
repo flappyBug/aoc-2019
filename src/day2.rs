@@ -1,3 +1,5 @@
+use std::convert::TryInto;
+
 pub struct Process {
     code: Vec<u32>,
     ip: usize,
@@ -11,12 +13,16 @@ impl Process {
         }
     }
 
-    pub fn read(&self, addr: usize) -> u32 {
-        self.code[addr]
+    pub fn read<T: TryInto<usize>>(&self, addr: T) -> u32 {
+        self.code[addr.try_into().ok().unwrap()]
     }
 
-    pub fn write(&mut self, addr: usize, value: u32) {
-        self.code[addr] = value
+    pub fn indirect_read<T: TryInto<usize>>(&self, addr: T) -> u32 {
+        self.read(self.read(addr))
+    }
+
+    pub fn write<T: TryInto<usize>, V: TryInto<u32>>(&mut self, addr: T, value: V) {
+        self.code[addr.try_into().ok().unwrap()] = value.try_into().ok().unwrap()
     }
 
     pub fn is_finished(&self) -> bool {
@@ -25,15 +31,15 @@ impl Process {
 
     pub fn step(&mut self) {
         let ip = self.ip;
-        let op1 = self.code[self.code[ip + 1] as usize];
-        let op2 = self.code[self.code[ip + 2] as usize];
-        let opcode = match self.code[ip] {
+        let op1 = self.indirect_read(ip + 1);
+        let op2 = self.indirect_read(ip + 2);
+        let value = match self.code[ip] {
             1 => op1 + op2,
             2 => op1 * op2,
             _ => unreachable!(),
         };
         self.ip += 4;
-        self.write(self.code[ip + 3] as usize, value);
+        self.write(self.code[ip + 3], value);
     }
 
     pub fn execute(&mut self) {
