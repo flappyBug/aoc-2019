@@ -13,12 +13,10 @@ struct Amplifier {
 
 impl Amplifier {
     fn run(&mut self, input: i32) -> i32 {
-        // let mut process = self.program.folk();
-        self.program.inputs.push(input);
-        self.program.inputs.push(self.phase);
+        self.program.input(self.phase);
+        self.program.input(input);
         self.program.execute();
-        assert_eq!(self.program.outputs.len(), 1);
-        self.program.outputs[0]
+        self.program.output().unwrap()
     }
 }
 

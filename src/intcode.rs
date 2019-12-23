@@ -1,36 +1,50 @@
 use std::convert::TryInto;
-
+use std::sync::mpsc::{channel, Receiver, Sender, TryIter, TryRecvError};
 pub struct Process {
     pub code: Vec<i32>,
     pub ip: usize,
-    pub inputs: Vec<i32>,
-    pub outputs: Vec<i32>,
+    pub input_rx: Receiver<i32>,
+    pub input_tx: Sender<i32>,
+    pub output_rx: Receiver<i32>,
+    pub output_tx: Sender<i32>,
 }
 
 impl Process {
     pub fn new(data: &str) -> Self {
+        let (input_tx, input_rx) = channel();
+        let (output_tx, output_rx) = channel();
         Self {
             code: data.split(',').map(|n| n.parse::<i32>().unwrap()).collect(),
             ip: 0,
-            inputs: vec![],
-            outputs: vec![],
+            input_tx,
+            input_rx,
+            output_tx,
+            output_rx,
         }
     }
     pub fn folk(&self) -> Self {
+        let (input_tx, input_rx) = channel();
+        let (output_tx, output_rx) = channel();
         Self {
             code: self.code.clone(),
             ip: self.ip,
-            inputs: self.inputs.clone(),
-            outputs: self.outputs.clone(),
+            input_rx,
+            input_tx,
+            output_rx,
+            output_tx,
         }
     }
 
-    pub fn pop_input(&mut self) -> i32 {
-        self.inputs.pop().unwrap()
+    pub fn input(&mut self, value: i32) {
+        self.input_tx.send(value).unwrap()
     }
 
-    pub fn push_output(&mut self, value: i32) {
-        self.outputs.push(value)
+    pub fn output(&mut self) -> Result<i32, TryRecvError> {
+        self.output_rx.try_recv()
+    }
+
+    pub fn output_iter(&mut self) -> TryIter<i32> {
+        self.output_rx.try_iter()
     }
 
     pub fn read<T: TryInto<usize>>(&self, addr: T) -> i32 {
@@ -92,7 +106,7 @@ impl Process {
                 self.ip += 4;
             }
             3 => {
-                let input = self.pop_input();
+                let input = self.input_rx.try_recv().unwrap();
                 self.indirect_write(ip + 1, input);
                 self.ip += 2;
             }
@@ -102,7 +116,7 @@ impl Process {
                 } else {
                     self.indirect_read(ip + 1)
                 };
-                self.push_output(output);
+                self.output_tx.send(output).unwrap();
                 self.ip += 2;
             }
             5 | 6 => {
